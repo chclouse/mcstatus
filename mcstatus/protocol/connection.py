@@ -1,3 +1,4 @@
+import asyncio
 import socket
 import struct
 
@@ -124,11 +125,78 @@ class Connection:
         self.write(data)
 
 
-class TCPSocketConnection(Connection):
-    def __init__(self, addr, timeout=3):
+class AsyncConnection:
+    def __init__(self):
+        self.sent = bytearray()
+        self.received = bytearray()
+
+    async def read(self, length):
+        result = self.received[:length]
+        self.received = self.received[length:]
+        return result
+
+    async def write(self, data):
+        if isinstance(data, Connection):
+            data = bytearray(data.flush())
+        if isinstance(data, str):
+            data = bytearray(data)
+        self.sent.extend(data)
+
+    def receive(self, data):
+        if not isinstance(data, bytearray):
+            data = bytearray(data)
+        self.received.extend(data)
+
+    def remaining(self):
+        return len(self.received)
+
+    def flush(self):
+        result = self.sent
+        self.sent = ""
+        return result
+
+    async def read_varint(self):
+        result = 0
+        for i in range(5):
+            part = ord(await self.read(1))
+            result |= (part & 0x7F) << 7 * i
+            if not part & 0x80:
+                return result
+        raise IOError("Server sent a varint that was too big!")
+
+    async def write_varint(self, value):
+        remaining = value
+        for i in range(5):
+            if remaining & ~0x7F == 0:
+                await self.write(struct.pack("!B", remaining))
+                return
+            await self.write(struct.pack("!B", remaining & 0x7F | 0x80))
+            remaining >>= 7
+        raise ValueError("The value %d is too big to send in a varint" % value)
+
+    async def read_buffer(self):
+        length = await self.read_varint()
+        result = Connection()
+        result.receive(await self.read(length))
+        return result
+
+    async def write_buffer(self, buffer):
+        data = buffer.flush()
+        await self.write_varint(len(data))
+        await self.write(data)
+
+class TCPSocketConnection(AsyncConnection):
+    def __init__(self):
         Connection.__init__(self)
-        self.socket = socket.create_connection(addr, timeout=timeout)
-        self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+    @staticmethod
+    async def connect(addr, timeout=3):
+        host, port = addr
+        instance = TCPSocketConnection()
+        connection_fut = asyncio.open_connection(host=host, port=port)
+        instance.reader, instance.writer = await asyncio.wait_for(
+            connection_fut, timeout=timeout)
+        return instance
 
     def flush(self):
         raise TypeError("TCPSocketConnection does not support flush()")
@@ -139,31 +207,34 @@ class TCPSocketConnection(Connection):
     def remaining(self):
         raise TypeError("TCPSocketConnection does not support remaining()")
 
-    def read(self, length):
-        result = bytearray()
-        while len(result) < length:
-            new = self.socket.recv(length - len(result))
-            if len(new) == 0:
-                raise IOError("Server did not respond with any information!")
-            result.extend(new)
-        return result
+    async def read(self, length):
+        return await self.reader.readexactly(length)
 
-    def write(self, data):
-        self.socket.send(data)
+    async def write(self, data):
+        self.writer.write(data)
+        await self.writer.drain()
 
     def __del__(self):
         try:
-            self.socket.close()
+            self.writer.close()
+            asyncio.run(self.writer.wait_close())
         except:
             pass
 
 
-class UDPSocketConnection(Connection):
-    def __init__(self, addr, timeout=3):
+class UDPSocketConnection(AsyncConnection):
+    def __init__(self):
         Connection.__init__(self)
-        self.addr = addr
-        self.socket = socket.socket(socket.AF_INET if ip_type(addr[0]) == 4 else socket.AF_INET6, socket.SOCK_DGRAM)
-        self.socket.settimeout(timeout)
+        self.loop = asyncio.get_running_loop()
+
+    @staticmethod
+    async def connect(addr, timeout=3):
+        instance = UDPSocketConnection()
+        instance.socket = socket.socket(socket.AF_INET if ip_type(addr[0]) == 4 else socket.AF_INET6,
+            socket.SOCK_DGRAM | socket.SOCK_NONBLOCK)
+        instance.socket.settimeout(timeout)
+        await instance.loop.sock_connect(instance.socket, addr)
+        return instance
 
     def flush(self):
         raise TypeError("UDPSocketConnection does not support flush()")
@@ -174,16 +245,16 @@ class UDPSocketConnection(Connection):
     def remaining(self):
         return 65535
 
-    def read(self, length):
+    async def read(self, length):
         result = bytearray()
         while len(result) == 0:
-            result.extend(self.socket.recvfrom(self.remaining())[0])
+            result.extend(await self.loop.sock_recv(self.socket, self.remaining()))
         return result
 
-    def write(self, data):
+    async def write(self, data):
         if isinstance(data, Connection):
             data = bytearray(data.flush())
-        self.socket.sendto(data, self.addr)
+        await self.loop.sock_sendall(self.socket, data)
 
     def __del__(self):
         try:

@@ -16,7 +16,7 @@ class ServerPinger:
         self.port = port
         self.ping_token = ping_token
 
-    def handshake(self):
+    async def handshake(self):
         packet = Connection()
         packet.write_varint(0)
         packet.write_varint(self.version)
@@ -24,14 +24,14 @@ class ServerPinger:
         packet.write_ushort(self.port)
         packet.write_varint(1)  # Intention to query status
 
-        self.connection.write_buffer(packet)
+        await self.connection.write_buffer(packet)
 
-    def read_status(self):
+    async def read_status(self):
         request = Connection()
         request.write_varint(0)  # Request status
-        self.connection.write_buffer(request)
+        await self.connection.write_buffer(request)
 
-        response = self.connection.read_buffer()
+        response = await self.connection.read_buffer()
         if response.read_varint() != 0:
             raise IOError("Received invalid status response packet.")
         try:
@@ -43,14 +43,14 @@ class ServerPinger:
         except ValueError as e:
             raise IOError("Received invalid status response: %s" % e)
 
-    def test_ping(self):
+    async def test_ping(self):
         request = Connection()
         request.write_varint(1)  # Test ping
         request.write_long(self.ping_token)
         sent = datetime.datetime.now()
-        self.connection.write_buffer(request)
+        await self.connection.write_buffer(request)
 
-        response = self.connection.read_buffer()
+        response = await self.connection.read_buffer()
         received = datetime.datetime.now()
         if response.read_varint() != 1:
             raise IOError("Received invalid ping response packet.")

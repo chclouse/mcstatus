@@ -26,35 +26,35 @@ class MinecraftServer:
 
         return MinecraftServer(host, port)
 
-    def ping(self, retries=3, **kwargs):
-        connection = TCPSocketConnection((self.host, self.port))
+    async def ping(self, retries=3, **kwargs):
         exception = None
         for attempt in range(retries):
             try:
+                connection = await TCPSocketConnection.connect((self.host, self.port))
                 pinger = ServerPinger(connection, host=self.host, port=self.port, **kwargs)
-                pinger.handshake()
-                return pinger.test_ping()
+                await pinger.handshake()
+                return await pinger.test_ping()
             except Exception as e:
                 exception = e
         else:
             raise exception
 
-    def status(self, retries=3, **kwargs):
-        connection = TCPSocketConnection((self.host, self.port))
+    async def status(self, retries=3, **kwargs):
         exception = None
         for attempt in range(retries):
             try:
+                connection = await TCPSocketConnection.connect((self.host, self.port))
                 pinger = ServerPinger(connection, host=self.host, port=self.port, **kwargs)
-                pinger.handshake()
-                result = pinger.read_status()
-                result.latency = pinger.test_ping()
+                await pinger.handshake()
+                result = await pinger.read_status()
+                result.latency = await pinger.test_ping()
                 return result
             except Exception as e:
                 exception = e
         else:
             raise exception
 
-    def query(self, retries=3):
+    async def query(self, retries=3):
         exception = None
         host = self.host
         try:
@@ -66,10 +66,10 @@ class MinecraftServer:
             pass
         for attempt in range(retries):
             try:
-                connection = UDPSocketConnection((host, self.port))
+                connection = await UDPSocketConnection.connect((host, self.port))
                 querier = ServerQuerier(connection)
-                querier.handshake()
-                return querier.read_query()
+                await querier.handshake()
+                return await querier.read_query()
             except Exception as e:
                 exception = e
         else:

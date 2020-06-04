@@ -1,7 +1,18 @@
+import asyncio
 import click
+from functools import wraps
 from json import dumps as json_dumps
 
 from .. import MinecraftServer
+
+
+def auto_await(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        asyncio.run(f(*args, **kwargs))
+
+    return wrapper
+
 
 server = None
 
@@ -43,20 +54,22 @@ def cli(address):
 
 
 @cli.command(short_help="prints server latency")
-def ping():
+@auto_await
+async def ping():
     """
     Ping server for latency.
     """
-    click.echo("{}ms".format(server.ping()))
+    click.echo("{}ms".format(await server.ping()))
 
 
 @cli.command(short_help="basic server information")
-def status():
+@auto_await
+async def status():
     """
     Prints server status. Supported by all Minecraft
     servers that are version 1.7 or higher.
     """
-    response = server.status()
+    response = await server.status()
     click.echo("version: v{} (protocol {})".format(response.version.name, response.version.protocol))
     click.echo("description: \"{}\"".format(response.description))
     click.echo(
@@ -72,7 +85,8 @@ def status():
 
 
 @cli.command(short_help="all available server information in json")
-def json():
+@auto_await
+async def json():
     """
     Prints server status and query in json. Supported by all Minecraft
     servers that are version 1.7 or higher.
@@ -80,11 +94,11 @@ def json():
     data = {'online': False}
     # Build data with responses and quit on exception
     try:
-        ping_res = server.ping()
+        ping_res = await server.ping()
         data['online'] = True
         data['ping'] = ping_res
 
-        status_res = server.status(retries=1)
+        status_res = await server.status(retries=1)
         data['version'] = status_res.version.name
         data['protocol'] = status_res.version.protocol
         data['motd'] = status_res.description
@@ -94,7 +108,7 @@ def json():
         if status_res.players.sample is not None:
             data['players'] = [{'name': player.name, 'id': player.id} for player in status_res.players.sample]
 
-        query_res = server.query(retries=1)
+        query_res = await server.query(retries=1)
         data['host_ip'] = query_res.raw['hostip']
         data['host_port'] = query_res.raw['hostport']
         data['map'] = query_res.map
@@ -105,12 +119,13 @@ def json():
 
 
 @cli.command(short_help="detailed server information")
-def query():
+@auto_await
+async def query():
     """
     Prints detailed server information. Must be enabled in
     servers' server.properties file.
     """
-    response = server.query()
+    response = await server.query()
     click.echo("host: {}:{}".format(response.raw['hostip'], response.raw['hostport']))
     click.echo("software: v{} {}".format(response.software.version, response.software.brand))
     click.echo("plugins: {}".format(response.software.plugins))

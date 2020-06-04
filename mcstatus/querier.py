@@ -20,24 +20,24 @@ class ServerQuerier:
         packet.write_int(self.challenge)
         return packet
 
-    def _read_packet(self):
+    async def _read_packet(self):
         packet = Connection()
-        packet.receive(self.connection.read(self.connection.remaining()))
+        packet.receive(await self.connection.read(self.connection.remaining()))
         packet.read(1 + 4)
         return packet
 
-    def handshake(self):
-        self.connection.write(self._create_packet(self.PACKET_TYPE_CHALLENGE))
+    async def handshake(self):
+        await self.connection.write(self._create_packet(self.PACKET_TYPE_CHALLENGE))
 
-        packet = self._read_packet()
+        packet = await self._read_packet()
         self.challenge = int(packet.read_ascii())
 
-    def read_query(self):
+    async def read_query(self):
         request = self._create_packet(self.PACKET_TYPE_QUERY)
         request.write_uint(0)
-        self.connection.write(request)
+        await self.connection.write(request)
 
-        response = self._read_packet()
+        response = await self._read_packet()
         response.read(len("splitnum") + 1 + 1 + 1)
         data = {}
         players = []
