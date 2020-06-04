@@ -187,7 +187,7 @@ class AsyncConnection:
 
 class TCPSocketConnection(AsyncConnection):
     def __init__(self):
-        Connection.__init__(self)
+        AsyncConnection.__init__(self)
 
     @staticmethod
     async def connect(addr, timeout=3):
@@ -224,7 +224,7 @@ class TCPSocketConnection(AsyncConnection):
 
 class UDPSocketConnection(AsyncConnection):
     def __init__(self):
-        Connection.__init__(self)
+        AsyncConnection.__init__(self)
         self.loop = asyncio.get_running_loop()
 
     @staticmethod
