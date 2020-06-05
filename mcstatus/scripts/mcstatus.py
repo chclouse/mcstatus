@@ -19,7 +19,8 @@ server = None
 
 @click.group(context_settings=dict(help_option_names=['-h', '--help']))
 @click.argument("address")
-def cli(address):
+@auto_await
+async def cli(address):
     """
     mcstatus provides an easy way to query Minecraft servers for
     any information they can expose. It provides three modes of
@@ -50,7 +51,7 @@ def cli(address):
     players: 1/20 ['Dinnerbone (61699b2e-d327-4a01-9f1e-0ea8c3f06bc6)']
     """
     global server
-    server = MinecraftServer.lookup(address)
+    server = await MinecraftServer.lookup(address)
 
 
 @cli.command(short_help="prints server latency")

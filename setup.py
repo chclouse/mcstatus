@@ -2,7 +2,7 @@ from setuptools import setup
 
 # TODO: read requirements from file
 install_requires = [
-    'click', 'dnspython3', 'six'
+    'aiodns', 'click', 'six'
 ]
 
 tests_require = [

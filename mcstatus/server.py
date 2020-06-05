@@ -2,7 +2,7 @@ from mcstatus.pinger import ServerPinger
 from mcstatus.protocol.connection import TCPSocketConnection, UDPSocketConnection
 from mcstatus.querier import ServerQuerier
 from mcstatus.scripts.address_tools import parse_address
-import dns.resolver
+from aiodns import DNSResolver
 
 
 class MinecraftServer:
@@ -11,17 +11,18 @@ class MinecraftServer:
         self.port = port
 
     @staticmethod
-    def lookup(address):
+    async def lookup(address):
         host, port = parse_address(address)
         if port is None:
             port = 25565
             try:
-                answers = dns.resolver.query("_minecraft._tcp." + host, "SRV")
+                resolver = DNSResolver()
+                answers = await resolver.query("_minecraft._tcp." + host, "SRV")
                 if len(answers):
                     answer = answers[0]
-                    host = str(answer.target).rstrip(".")
+                    host = str(answer.host).rstrip(".")
                     port = int(answer.port)
-            except Exception:
+            except Exception as e:
                 pass
 
         return MinecraftServer(host, port)
@@ -58,10 +59,11 @@ class MinecraftServer:
         exception = None
         host = self.host
         try:
-            answers = dns.resolver.query(host, "A")
+            resolver = DNSResolver()
+            answers = await resolver.query(host, "A")
             if len(answers):
                 answer = answers[0]
-                host = str(answer).rstrip(".")
+                host = str(answer.host).rstrip(".")
         except Exception as e:
             pass
         for attempt in range(retries):
